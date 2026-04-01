@@ -145,6 +145,7 @@
       <button class="toggle-btn active" id="btnMorning" onclick="setMode('morning')">Morning</button>
       <button class="toggle-btn" id="btnEvening" onclick="setMode('evening')">Evening</button>
       <button class="toggle-btn" id="btnWeekly" onclick="setMode('weekly')">Week</button>
+      <button class="toggle-btn" id="btnSettings" onclick="setMode('settings')">⚙</button>
     </div>
   </div>
 
@@ -197,7 +198,18 @@
     <button class="save-btn" id="saveEveningBtn" onclick="saveData()">Save Evening Entry</button>
   </div>
 
-  <div id="weeklyPanel" class="hidden">
+  <div id="settingsPanel" class="hidden">
+    <div class="card">
+      <div class="card-label">Anthropic API Key</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;">Your key is stored only on this device. Get one at <span style="color:var(--accent-light)">console.anthropic.com</span></p>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-…" style="margin-bottom:10px;">
+      <div style="display:flex;gap:8px;">
+        <button class="gen-btn" onclick="saveApiKey()" style="font-size:13px;padding:11px;">Save Key</button>
+        <button class="regen-btn" onclick="clearApiKey()" style="width:auto;padding:11px 16px;">Clear</button>
+      </div>
+      <div id="keyStatus" style="font-size:12px;color:var(--sage);margin-top:10px;text-align:center;"></div>
+    </div>
+  </div>
     <div id="weeklyContent"></div>
     <div class="footer-note">Showing the last 7 days · Entries auto-saved each day</div>
   </div>
@@ -285,15 +297,48 @@ function init() {
   setMode(currentMode);
 }
 
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('keyStatus').textContent = '⚠ That doesn\'t look like a valid key.';
+    document.getElementById('keyStatus').style.color = 'var(--rose)';
+    return;
+  }
+  localStorage.setItem('anthropic-key', key);
+  document.getElementById('keyStatus').textContent = '✓ Key saved — you\'re ready to go.';
+  document.getElementById('keyStatus').style.color = 'var(--sage)';
+}
+
+function clearApiKey() {
+  localStorage.removeItem('anthropic-key');
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('keyStatus').textContent = 'Key cleared.';
+  document.getElementById('keyStatus').style.color = 'var(--muted)';
+}
+
+function getApiKey() {
+  return localStorage.getItem('anthropic-key') || '';
+}
+
 function setMode(m) {
   currentMode = m;
   document.getElementById('morningPanel').classList.toggle('hidden', m !== 'morning');
   document.getElementById('eveningPanel').classList.toggle('hidden', m !== 'evening');
   document.getElementById('weeklyPanel').classList.toggle('hidden', m !== 'weekly');
+  document.getElementById('settingsPanel').classList.toggle('hidden', m !== 'settings');
   document.getElementById('btnMorning').classList.toggle('active', m === 'morning');
   document.getElementById('btnEvening').classList.toggle('active', m === 'evening');
   document.getElementById('btnWeekly').classList.toggle('active', m === 'weekly');
+  document.getElementById('btnSettings').classList.toggle('active', m === 'settings');
   if (m === 'weekly') renderWeekly();
+  if (m === 'settings') {
+    const stored = getApiKey();
+    if (stored) {
+      document.getElementById('apiKeyInput').value = stored;
+      document.getElementById('keyStatus').textContent = '✓ Key saved.';
+      document.getElementById('keyStatus').style.color = 'var(--sage)';
+    }
+  }
 }
 
 function renderWeekly() {
@@ -396,12 +441,15 @@ function getDateStr() {
 }
 
 async function callClaude(system, userMsg) {
+  const key = getApiKey();
+  if (!key) throw new Error('No API key — tap ⚙ to add your key.');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
     body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system, messages: [{ role: 'user', content: userMsg }] })
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
   return JSON.parse(data.content[0].text.replace(/```json|```/g,'').trim());
 }
 
@@ -412,8 +460,7 @@ async function generateMorning() {
   try {
     const brief = await callClaude(SYSTEM_MORNING, 'Today is ' + getDateStr() + '. Generate my morning brief.');
     state.brief = brief; renderBrief(brief); saveData(true);
-  } catch(e) { err.textContent = 'Couldn\'t connect — try again.'; err.classList.remove('hidden'); }
-  btn.disabled = false; btn.textContent = 'Generate My Morning Brief';
+  } catch(e) { err.textContent = e.message.includes('key') ? 'No API key — tap ⚙ Settings to add yours.' : 'Couldn\'t connect — try again.'; err.classList.remove('hidden'); }
 }
 
 function renderBrief(b) {
