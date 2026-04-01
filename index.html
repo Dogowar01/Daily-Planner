@@ -51,6 +51,11 @@
   .header-line { width: 50px; height: 1px; background: var(--accent); margin: 0 auto 18px; opacity: 0.7; }
   .greeting-word { font-family: 'Playfair Display', serif; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent-light); margin-bottom: 6px; }
   .date-str { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--cream); line-height: 1.3; margin-bottom: 14px; }
+  .rates-strip { display: flex; align-items: center; justify-content: space-around; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 10px 16px; margin-bottom: 16px; }
+  .rate-item { text-align: center; flex: 1; }
+  .rate-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .rate-value { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--accent-light); }
+  .rate-divider { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
   .countdown-strip { background: var(--surface2); border: 1px solid var(--accent); border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; text-align: center; }
   .countdown-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent-light); margin-bottom: 6px; }
   .countdown-timer { font-family: 'Playfair Display', serif; font-size: 24px; color: var(--cream); letter-spacing: 1px; margin-bottom: 4px; }
@@ -135,6 +140,23 @@
         <span id="weatherRain"></span>
       </div>
     </div>
+
+    <div class="rates-strip">
+      <div class="rate-item">
+        <div class="rate-label">AUD/USD</div>
+        <div class="rate-value" id="rateUSD">—</div>
+      </div>
+      <div class="rate-divider"></div>
+      <div class="rate-item">
+        <div class="rate-label">AUD/JPY</div>
+        <div class="rate-value" id="rateJPY">—</div>
+      </div>
+      <div class="rate-divider"></div>
+      <div class="rate-item">
+        <div class="rate-label">Diesel ¢/L</div>
+        <div class="rate-value" id="rateDiesel">—</div>
+      </div>
+    </div>
     <div class="countdown-strip" id="countdownStrip">
       <div class="countdown-label">⛴ Spirit of Tasmania · Homecoming</div>
       <div class="countdown-timer" id="countdownTimer">—</div>
@@ -153,6 +175,7 @@
     <div class="card">
       <div class="card-label">Morning Brief</div>
       <div id="briefEmpty">
+        <div id="noKeyWarning" class="hidden" style="background:var(--surface2);border:1px solid var(--rose);border-radius:4px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--rose);text-align:center;">No API key — tap ⚙ to add yours first.</div>
         <button class="gen-btn" id="genMorningBtn" onclick="generateMorning()">Generate My Morning Brief</button>
         <div class="error hidden" id="morningError"></div>
       </div>
@@ -209,6 +232,15 @@
       </div>
       <div id="keyStatus" style="font-size:12px;color:var(--sage);margin-top:10px;text-align:center;"></div>
     </div>
+    <div class="card">
+      <div class="card-label">Local Diesel Price</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;">Update when you fill up — cents per litre.</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="dieselInput" placeholder="e.g. 198" style="margin-bottom:0;">
+        <button class="gen-btn" onclick="saveDiesel()" style="font-size:13px;padding:11px;white-space:nowrap;width:auto;">Save</button>
+      </div>
+      <div id="dieselStatus" style="font-size:12px;color:var(--sage);margin-top:10px;text-align:center;"></div>
+    </div>
   </div>
 
   <div id="weeklyPanel" class="hidden">
@@ -239,6 +271,36 @@ function updateCountdown() {
 }
 updateCountdown();
 setInterval(updateCountdown, 1000);
+
+async function fetchRates() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/AUD');
+    const d = await res.json();
+    const usd = d.rates.USD;
+    const jpy = d.rates.JPY;
+    document.getElementById('rateUSD').textContent = usd ? usd.toFixed(4) : '—';
+    document.getElementById('rateJPY').textContent = jpy ? jpy.toFixed(2) : '—';
+  } catch(e) {
+    document.getElementById('rateUSD').textContent = '—';
+    document.getElementById('rateJPY').textContent = '—';
+  }
+  // Load diesel from storage
+  const diesel = localStorage.getItem('diesel-price');
+  document.getElementById('rateDiesel').textContent = diesel ? diesel + '¢' : '—';
+}
+
+function saveDiesel() {
+  const val = document.getElementById('dieselInput').value.trim();
+  if (!val || isNaN(val)) {
+    document.getElementById('dieselStatus').textContent = '⚠ Enter a number e.g. 198';
+    document.getElementById('dieselStatus').style.color = 'var(--rose)';
+    return;
+  }
+  localStorage.setItem('diesel-price', val);
+  document.getElementById('rateDiesel').textContent = val + '¢';
+  document.getElementById('dieselStatus').textContent = '✓ Diesel price saved.';
+  document.getElementById('dieselStatus').style.color = 'var(--sage)';
+}
 
 async function fetchWeather() {
   try {
@@ -283,6 +345,7 @@ function init() {
   document.getElementById('greetingWord').textContent = (hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening') + ', Kirk';
   document.getElementById('dateStr').textContent = days[today.getDay()] + ', ' + today.getDate() + ' ' + months[today.getMonth()] + ' ' + today.getFullYear();
   fetchWeather();
+  fetchRates();
   try {
     const saved = localStorage.getItem('kd-' + todayKey);
     if (saved) {
@@ -297,6 +360,10 @@ function init() {
   } catch(e) {}
   renderTasks();
   setMode(currentMode);
+  // Show key warning if no key stored
+  if (!getApiKey()) {
+    document.getElementById('noKeyWarning').classList.remove('hidden');
+  }
 }
 
 function saveApiKey() {
@@ -307,8 +374,14 @@ function saveApiKey() {
     return;
   }
   localStorage.setItem('anthropic-key', key);
-  document.getElementById('keyStatus').textContent = '✓ Key saved — you\'re ready to go.';
+  document.getElementById('keyStatus').textContent = '✓ Key saved to this device — you\'re ready to go.';
   document.getElementById('keyStatus').style.color = 'var(--sage)';
+  // Verify it saved
+  const check = localStorage.getItem('anthropic-key');
+  if (!check) {
+    document.getElementById('keyStatus').textContent = '⚠ Storage failed — try a different browser.';
+    document.getElementById('keyStatus').style.color = 'var(--rose)';
+  }
 }
 
 function clearApiKey() {
@@ -340,6 +413,8 @@ function setMode(m) {
       document.getElementById('keyStatus').textContent = '✓ Key saved.';
       document.getElementById('keyStatus').style.color = 'var(--sage)';
     }
+    const diesel = localStorage.getItem('diesel-price');
+    if (diesel) document.getElementById('dieselInput').value = diesel;
   }
 }
 
@@ -419,15 +494,15 @@ function addTask() {
   renderTasks();
   const inputs = document.querySelectorAll('.task-input');
   if (inputs.length) inputs[inputs.length-1].focus();
-  autoSave();
+  saveData(true);
 }
 function deleteTask(i) {
   state.tasks.splice(i, 1);
   if (!state.tasks.length) state.tasks = [{text:'', done:false}];
-  renderTasks(); autoSave();
+  renderTasks(); saveData(true);
 }
-function toggleTask(i) { state.tasks[i].done = !state.tasks[i].done; renderTasks(); autoSave(); }
-function updateTaskText(i, val) { state.tasks[i].text = val; autoSave(); }
+function toggleTask(i) { state.tasks[i].done = !state.tasks[i].done; renderTasks(); saveData(true); }
+function updateTaskText(i, val) { state.tasks[i].text = val; saveData(true); }
 function taskKeydown(e, i) {
   if (e.key === 'Enter') { e.preventDefault(); addTask(); }
   if (e.key === 'Backspace' && state.tasks[i].text === '' && state.tasks.length > 1) {
@@ -505,20 +580,26 @@ function updateEveningAnswer(i, val) {
 
 let autoSaveTimer;
 function autoSave() {
+  saveData(true);
   clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(() => saveData(true), 1500);
+  autoSaveTimer = setTimeout(() => saveData(true), 500);
 }
 
 function saveData(silent = false) {
-  state.morningNote = document.getElementById('morningNote').value;
-  state.carried = document.getElementById('carried').value;
-  try { localStorage.setItem('kd-' + todayKey, JSON.stringify(state)); } catch(e) {}
+  // Always pull latest values from DOM before saving
+  const morningEl = document.getElementById('morningNote');
+  const carriedEl = document.getElementById('carried');
+  if (morningEl) state.morningNote = morningEl.value;
+  if (carriedEl) state.carried = carriedEl.value;
+  try {
+    const payload = JSON.stringify(state);
+    localStorage.setItem('kd-' + todayKey, payload);
+  } catch(e) { console.error('Save failed', e); }
   if (!silent) {
     const id = currentMode === 'morning' ? 'saveMorningBtn' : 'saveEveningBtn';
     const label = currentMode === 'morning' ? 'Save Morning Entry' : 'Save Evening Entry';
     const btn = document.getElementById(id);
-    btn.textContent = '✓ Saved'; btn.classList.add('saved');
-    setTimeout(() => { btn.textContent = label; btn.classList.remove('saved'); }, 2000);
+    if (btn) { btn.textContent = '✓ Saved'; btn.classList.add('saved'); setTimeout(() => { btn.textContent = label; btn.classList.remove('saved'); }, 2000); }
   }
 }
 
