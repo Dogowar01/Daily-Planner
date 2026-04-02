@@ -243,7 +243,14 @@
     <div class="card">
       <div class="card-label">Today's Tasks</div>
       <div class="task-list" id="eveningTaskList"></div>
-      <button class="add-task-btn" onclick="addTask(); renderEveningTasks();">+ Add task</button>
+      <button class="add-task-btn" onclick="addTask()">+ Add task</button>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Tomorrow's Tasks</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;font-style:italic;">These will be waiting for you in the morning.</p>
+      <div class="task-list" id="tomorrowTaskList"></div>
+      <button class="add-task-btn" onclick="addTomorrowTask()">+ Add task for tomorrow</button>
     </div>
 
     <div class="card">
@@ -362,12 +369,23 @@ function init() {
       const d = JSON.parse(saved);
       Object.assign(state, d);
       if (!state.tasks || !state.tasks.length) state.tasks = [{text:'', done:false}];
-      if (state.morningNote) document.getElementById('morningNote').value = state.morningNote;
-      if (state.eveningNotes) document.getElementById('eveningNotes').value = state.eveningNotes;
-      if (state.carried) document.getElementById('carried').value = state.carried;
-      if (state.brief) renderBrief(state.brief);
-      if (state.eveningBrief) renderEvening(state.eveningBrief, state.eveningAnswers || ['','','']);
+    } else {
+      // Check if yesterday queued tasks for today
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+      const yKey = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+      try {
+        const yd = JSON.parse(localStorage.getItem('kd-' + yKey) || '{}');
+        // Yesterday's tomorrow tasks become today's tasks
+        if (yd.tomorrowTasks && yd.tomorrowTasks.length) {
+          state.tasks = yd.tomorrowTasks.map(t => ({ text: t.text, done: false }));
+        }
+      } catch(e) {}
     }
+    if (state.morningNote) document.getElementById('morningNote').value = state.morningNote;
+    if (state.eveningNotes) document.getElementById('eveningNotes').value = state.eveningNotes;
+    if (state.carried) document.getElementById('carried').value = state.carried;
+    if (state.brief) renderBrief(state.brief);
+    if (state.eveningBrief) renderEvening(state.eveningBrief, state.eveningAnswers || ['','','']);
   } catch(e) {}
 
   renderTasks();
@@ -520,28 +538,91 @@ function renderEveningTasks() {
   if (!list) return;
   list.innerHTML = '';
   if (!state.tasks || !state.tasks.filter(t => t.text.trim()).length) {
-    list.innerHTML = '<div style="font-size:13px;color:var(--muted);font-style:italic;">No tasks logged today.</div>';
-    return;
+    list.innerHTML = '<div style="font-size:13px;color:var(--muted);font-style:italic;">No tasks logged today — add one below.</div>';
   }
   state.tasks.forEach((task, i) => {
-    if (!task.text.trim()) return;
     const row = document.createElement('div');
     row.className = 'task-row';
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'task-check'; check.checked = task.done;
-    const label = document.createElement('span');
-    label.style.cssText = 'flex:1;font-size:14px;padding:8px 4px;color:' + (task.done ? 'var(--muted)' : 'var(--cream)') + ';' + (task.done ? 'text-decoration:line-through;' : '');
-    label.textContent = task.text;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'task-input' + (task.done ? ' done' : '');
+    inp.placeholder = 'Task…'; inp.value = task.text;
     check.addEventListener('change', () => {
       state.tasks[i].done = check.checked;
-      label.style.color = check.checked ? 'var(--muted)' : 'var(--cream)';
-      label.style.textDecoration = check.checked ? 'line-through' : 'none';
-      saveData(true);
-      renderTasks(); // keep morning tasks in sync
+      inp.classList.toggle('done', check.checked);
+      saveData(true); renderTasks();
     });
-    row.appendChild(check); row.appendChild(label);
+    inp.addEventListener('input', () => { state.tasks[i].text = inp.value; saveData(true); renderTasks(); });
+    const del = document.createElement('button');
+    del.className = 'task-del'; del.textContent = '×';
+    del.addEventListener('click', () => {
+      state.tasks.splice(i, 1);
+      if (!state.tasks.length) state.tasks = [{text:'', done:false}];
+      saveData(true); renderTasks(); renderEveningTasks();
+    });
+    row.appendChild(check); row.appendChild(inp); row.appendChild(del);
     list.appendChild(row);
   });
+  renderTomorrowTasks();
+}
+
+// ── TOMORROW'S TASKS ──
+function getTomorrowKey() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function getTomorrowTasks() {
+  try {
+    const d = JSON.parse(localStorage.getItem('kd-' + getTomorrowKey()) || '{}');
+    return d.tasks || [];
+  } catch(e) { return []; }
+}
+
+function saveTomorrowTasks(tasks) {
+  const key = getTomorrowKey();
+  try {
+    const existing = JSON.parse(localStorage.getItem('kd-' + key) || '{}');
+    existing.tasks = tasks;
+    localStorage.setItem('kd-' + key, JSON.stringify(existing));
+  } catch(e) {}
+}
+
+function renderTomorrowTasks() {
+  const list = document.getElementById('tomorrowTaskList');
+  if (!list) return;
+  list.innerHTML = '';
+  const tasks = getTomorrowTasks();
+  if (!tasks.length) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--muted);font-style:italic;">Nothing queued yet.</div>';
+    return;
+  }
+  tasks.forEach((task, i) => {
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'task-input'; inp.value = task.text;
+    inp.placeholder = 'Task for tomorrow…';
+    inp.addEventListener('input', () => { tasks[i].text = inp.value; saveTomorrowTasks(tasks); });
+    const del = document.createElement('button');
+    del.className = 'task-del'; del.textContent = '×';
+    del.addEventListener('click', () => { tasks.splice(i, 1); saveTomorrowTasks(tasks); renderTomorrowTasks(); });
+    row.appendChild(inp); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+function addTomorrowTask() {
+  const tasks = getTomorrowTasks();
+  tasks.push({text:'', done:false});
+  saveTomorrowTasks(tasks);
+  renderTomorrowTasks();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('#tomorrowTaskList .task-input');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  }, 0);
 }
 
 function addTask() {
