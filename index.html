@@ -478,37 +478,70 @@ function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 function renderTasks() {
   const list = document.getElementById('taskList');
+  if (!list) return;
   list.innerHTML = '';
   state.tasks.forEach((task, i) => {
     const row = document.createElement('div');
     row.className = 'task-row';
-    row.innerHTML = '<input type="checkbox" class="task-check"' + (task.done ? ' checked' : '') + ' onchange="toggleTask(' + i + ')">' +
-      '<input type="text" class="task-input' + (task.done ? ' done' : '') + '" value="' + escHtml(task.text) + '" placeholder="Add a task…" oninput="updateTaskText(' + i + ', this.value)" onkeydown="taskKeydown(event,' + i + ')">' +
-      '<button class="task-del" onclick="deleteTask(' + i + ')">×</button>';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'task-check';
+    check.checked = task.done;
+    check.addEventListener('change', () => {
+      state.tasks[i].done = check.checked;
+      inp.classList.toggle('done', check.checked);
+      saveData(true);
+    });
+
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'task-input' + (task.done ? ' done' : '');
+    inp.placeholder = 'Add a task…';
+    inp.value = task.text;
+    inp.addEventListener('input', () => {
+      state.tasks[i].text = inp.value;
+      saveData(true);
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addTask(); }
+      if (e.key === 'Backspace' && inp.value === '' && state.tasks.length > 1) {
+        e.preventDefault();
+        state.tasks.splice(i, 1);
+        saveData(true);
+        renderTasks();
+        setTimeout(() => {
+          const inputs = document.querySelectorAll('.task-input');
+          if (inputs[i - 1]) inputs[i - 1].focus();
+        }, 0);
+      }
+    });
+
+    const del = document.createElement('button');
+    del.className = 'task-del';
+    del.textContent = '×';
+    del.addEventListener('click', () => {
+      state.tasks.splice(i, 1);
+      if (!state.tasks.length) state.tasks = [{text:'', done:false}];
+      saveData(true);
+      renderTasks();
+    });
+
+    row.appendChild(check);
+    row.appendChild(inp);
+    row.appendChild(del);
     list.appendChild(row);
   });
 }
 
 function addTask() {
   state.tasks.push({text:'', done:false});
-  renderTasks();
-  const inputs = document.querySelectorAll('.task-input');
-  if (inputs.length) inputs[inputs.length-1].focus();
   saveData(true);
-}
-function deleteTask(i) {
-  state.tasks.splice(i, 1);
-  if (!state.tasks.length) state.tasks = [{text:'', done:false}];
-  renderTasks(); saveData(true);
-}
-function toggleTask(i) { state.tasks[i].done = !state.tasks[i].done; renderTasks(); saveData(true); }
-function updateTaskText(i, val) { state.tasks[i].text = val; saveData(true); }
-function taskKeydown(e, i) {
-  if (e.key === 'Enter') { e.preventDefault(); addTask(); }
-  if (e.key === 'Backspace' && state.tasks[i].text === '' && state.tasks.length > 1) {
-    e.preventDefault(); deleteTask(i);
-    setTimeout(() => { const ins = document.querySelectorAll('.task-input'); if (ins[i-1]) ins[i-1].focus(); }, 0);
-  }
+  renderTasks();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.task-input');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  }, 0);
 }
 
 function getDateStr() {
