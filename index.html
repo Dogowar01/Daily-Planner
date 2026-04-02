@@ -8,17 +8,16 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0d1520;
-    --surface: #141f2e;
-    --surface2: #1a2840;
-    --border: #1e3050;
-    --accent: #5b8db8;
-    --accent-light: #8fbce0;
-    --cream: #d8e8f4;
-    --muted: #5a7a96;
-    --silver: #a8c0d4;
-    --sage: #5b9e7a;
-    --rose: #c87878;
+    --bg: #0e0c0a;
+    --surface: #181410;
+    --surface2: #221a12;
+    --border: #3a2820;
+    --accent: #4a9090;
+    --accent-light: #72baba;
+    --cream: #f0e0cc;
+    --muted: #806050;
+    --sage: #c8a030;
+    --rose: #c04030;
   }
   body {
     background: var(--bg);
@@ -36,7 +35,7 @@
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    opacity: 0.28;
+    opacity: 0.50;
     pointer-events: none;
     z-index: 0;
   }
@@ -334,7 +333,14 @@ const SYSTEM_EVENING = `You are Kirk's evening reflection assistant for Kirk —
 {"reflection":"One warm closing sentence for the day.","prompts":["Specific question about what moved forward today","Question about one thing Kirk noticed or felt today","Gentle forward-looking question about tomorrow"]}`;
 
 const today = new Date();
-const todayKey = today.toISOString().split('T')[0];
+function getLocalDateKey() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+const todayKey = getLocalDateKey();
 const hour = today.getHours();
 let currentMode = hour >= 17 ? 'evening' : 'morning';
 let state = { brief: null, eveningBrief: null, tasks: [{text:'', done:false}], morningNote: '', eveningAnswers: ['','',''], carried: '' };
@@ -427,7 +433,10 @@ function renderWeekly() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = d.toISOString().split('T')[0];
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const key = year + '-' + month + '-' + day;
     const isToday = i === 0;
     let data = null;
     try { data = JSON.parse(localStorage.getItem('kd-' + key) || 'null'); } catch(e) {}
@@ -569,8 +578,16 @@ async function generateMorning() {
   btn.disabled = true; btn.textContent = 'Generating · · ·'; err.classList.add('hidden');
   try {
     const brief = await callClaude(SYSTEM_MORNING, 'Today is ' + getDateStr() + '. Generate my morning brief.');
-    state.brief = brief; renderBrief(brief); saveData(true);
-  } catch(e) { err.textContent = e.message.includes('key') ? 'No API key — tap ⚙ Settings to add yours.' : 'Couldn\'t connect — try again.'; err.classList.remove('hidden'); }
+    state.brief = brief;
+    renderBrief(brief);
+    saveData(true);
+    renderTasks(); // re-attach task listeners after save
+  } catch(e) {
+    err.textContent = e.message.includes('key') ? 'No API key — tap ⚙ Settings to add yours.' : 'Couldn\'t connect — try again.';
+    err.classList.remove('hidden');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Regenerate';
 }
 
 function renderBrief(b) {
